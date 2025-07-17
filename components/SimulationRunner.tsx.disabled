@@ -1,0 +1,526 @@
+// components/SimulationRunner.tsx
+// Simulador para testar o Discovery com dados fictícios
+import React, { useState } from 'react';
+import { ReportGenerator, CompanyProfile, AIInsight } from '@/lib/ai-prompts';
+import { ConsultiveDiagnosisGenerator } from '@/lib/consultive-prompts';
+import IntelligentDiagnosisEngine from '@/lib/intelligent-diagnosis-engine';
+import { CRITICAL_SECTIONS_PROMPTS, ExecutiveReportGenerator } from '@/lib/critical-sections-prompts';
+
+interface SimulationRunnerProps {
+  onComplete?: (report: string) => void;
+}
+
+const FAKE_COMPANY: CompanyProfile = {
+  name: "TributConsult Pro Ltda",
+  size: "MÉDIA",
+  maturity: "DIGITALIZANDO", 
+  industry_focus: ["Consultoria Tributária", "RCT", "Planejamento Fiscal"],
+  main_challenges: ["Processos manuais", "Falta de integração", "Demanda crescente"],
+  ai_readiness: 45,
+  automation_potential: 75
+};
+
+const FAKE_RESPONSES = {
+  // Seção 1: Escolha e Priorização de Serviços
+  1: [
+    ["RCT", "Planejamento", "Auditoria", "Consultoria", "Outros"], // Distribuição de faturamento
+    ["ICMS - diferencial específico"], // Especialidade mais competitiva
+    ["RCT - processos bem definidos", "Auditoria - checklists padrão"], // Padronizáveis
+    ["Planejamento Tributário (Alto risco)", "Consultoria para Disputas (Alto risco)"], // Alto risco
+    ["RCT", "Planejamento", "Auditoria"], // Expandir nos próximos 2 anos
+    ["Recuperação de Créditos (aumentar volume)"] // Serviço para expandir
+  ],
+
+  // Seção 3: Visão de Automação e IA  
+  3: [
+    ["Planilhas com macros/fórmulas avançadas", "Geração automática de relatórios"], // Processos automatizados
+    ["ChatGPT para pesquisas/textos", "Google Gemini/Bard"], // Ferramentas IA testadas
+    ["Triagem inicial de documentos", "Cálculos tributários repetitivos", "Pesquisa em bases legais"], // Candidatas à automação
+    ["Custo muito alto de implementação"], // Maior receio
+    ["Redução de tempo por caso", "Maior precisão/menos erros", "Aumento de escala/volume de casos"], // Ganhos esperados
+    ["Receptiva, mas com algumas preocupações"], // Reação da equipe
+    ["Sócio/Diretor seria o champion do projeto"], // Sponsor interno
+    ["ROI demonstrado em 12 meses"] // Critério para aprovar
+  ],
+
+  // Seção 16: Agentes Comerciais Principais
+  16: [
+    ["Muito útil para alcançar grandes empresas"], // BDR Virtual
+    ["Game-changer para nossa operação"], // SDR Virtual
+    ["Útil para casos mais simples"], // Closer Virtual  
+    ["Útil para comunicações de rotina"], // Customer Success Virtual
+    ["BDR Virtual Especializado", "SDR Virtual", "Customer Success Virtual", "Closer Virtual"] // Sequência ideal
+  ]
+};
+
+const FAKE_OBSERVATIONS = {
+  1: [
+    "Atualmente RCT representa 60% do nosso faturamento, mas queremos diversificar",
+    "Somos reconhecidos no mercado por nossa expertise em ICMS, especialmente no setor industrial",
+    "Temos processos bem definidos para RCT e auditoria, mas planejamento ainda é muito artesanal",
+    "Planejamento tributário sempre requer revisão de sócio devido ao risco, isso gera gargalo",
+    "Mercado de RCT está aquecido, mas margem está sendo pressionada pela concorrência",
+    "Queremos aumentar participação em planejamento porque tem margem melhor"
+  ],
+  3: [
+    "Usamos muito Excel com macros complexas, mas ainda temos muitos processos manuais",
+    "Testamos ChatGPT informalmente para pesquisas, resultados foram surpreendentes",
+    "Triagem de documentos fiscais consome muito tempo da equipe júnior",
+    "Principal receio é custo alto sem garantia de ROI no curto prazo",
+    "Esperamos principalmente reduzir tempo dos processos manuais repetitivos",
+    "Equipe está curiosa mas tem receio de perder emprego",
+    "Sócio-diretor já demonstrou interesse em liderar iniciativas de inovação",
+    "Precisamos ver ROI em 12 meses para justificar o investimento"
+  ],
+  16: [
+    "BDR virtual seria muito útil para prospectar grandes empresas industriais",
+    "SDR 24h seria game-changer, perdemos muitos leads fora do horário comercial",
+    "Closer virtual talvez só para casos mais simples, fechamento ainda precisa do humano",
+    "CS virtual para follow-up seria perfeito, hoje fazemos pouco acompanhamento",
+    "Sequência: BDR primeiro (grandes contas), depois SDR (volume), depois CS (retenção)"
+  ]
+};
+
+export const SimulationRunner: React.FC<SimulationRunnerProps> = ({ onComplete }) => {
+  const [isRunning, setIsRunning] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentStep, setCurrentStep] = useState('');
+  const [generatedInsights, setGeneratedInsights] = useState<AIInsight[]>([]);
+  const [finalReport, setFinalReport] = useState<string>('');
+
+  const runSimulation = async () => {
+    setIsRunning(true);
+    setProgress(0);
+    
+    try {
+      // Simulação das seções críticas
+      const sections = [1, 3, 16];
+      const insights: AIInsight[] = [];
+      
+      for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
+        const sectionId = sections[sectionIndex];
+        setCurrentStep(`Processando Seção ${sectionId}...`);
+        
+        const responses = FAKE_RESPONSES[sectionId as keyof typeof FAKE_RESPONSES];
+        const observations = FAKE_OBSERVATIONS[sectionId as keyof typeof FAKE_OBSERVATIONS];
+        
+        // Gera insights para cada questão da seção
+        for (let questionIndex = 0; questionIndex < responses.length; questionIndex++) {
+          const questionId = sectionId * 10 + questionIndex + 1; // ID fictício
+          
+          // Simula geração de insight com delay realista
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          const insight: AIInsight = {
+            question_id: questionId,
+            section_id: sectionId,
+            response: responses[questionIndex],
+            observations: observations[questionIndex],
+            ai_analysis: {
+              complexity_score: Math.floor(Math.random() * 5) + 5, // 5-10
+              strategic_importance: sectionId === 1 ? 9 : sectionId === 3 ? 8 : 7,
+              automation_potential: Math.floor(Math.random() * 4) + 6, // 6-10
+              risk_level: sectionId === 3 ? 7 : Math.floor(Math.random() * 3) + 4,
+              insights: generateInsights(sectionId, responses[questionIndex], observations[questionIndex]),
+              recommendations: generateRecommendations(sectionId, questionIndex),
+              red_flags: generateRedFlags(sectionId, responses[questionIndex]),
+              opportunities: generateOpportunities(sectionId, questionIndex)
+            }
+          };
+          
+          insights.push(insight);
+          
+          // Atualiza progresso
+          const totalQuestions = sections.reduce((acc, sid) => 
+            acc + FAKE_RESPONSES[sid as keyof typeof FAKE_RESPONSES].length, 0);
+          const currentProgress = ((sectionIndex * responses.length + questionIndex + 1) / totalQuestions) * 80;
+          setProgress(currentProgress);
+        }
+      }
+      
+      setGeneratedInsights(insights);
+      setCurrentStep('Aplicando metodologias avançadas de Discovery...');
+      setProgress(85);
+      
+      // Aplica frameworks de consultoria para seções críticas
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const criticalAnalyses: any = {};
+      
+      // Análise Seção 1 - Portfolio de Serviços
+      const section1Responses = FAKE_RESPONSES[1];
+      const section1Observations = FAKE_OBSERVATIONS[1];
+      criticalAnalyses.section1 = await simulateAdvancedPrompt(
+        CRITICAL_SECTIONS_PROMPTS.section_1_service_portfolio(section1Responses, section1Observations)
+      );
+      
+      // Análise Seção 3 - Automação e IA  
+      const section3Responses = FAKE_RESPONSES[3];
+      const section3Observations = FAKE_OBSERVATIONS[3];
+      criticalAnalyses.section3 = await simulateAdvancedPrompt(
+        CRITICAL_SECTIONS_PROMPTS.section_3_ai_automation(section3Responses, section3Observations)
+      );
+      
+      // Análise Seção 16 - Agentes Comerciais
+      const section16Responses = FAKE_RESPONSES[16];
+      const section16Observations = FAKE_OBSERVATIONS[16];
+      criticalAnalyses.section16 = await simulateAdvancedPrompt(
+        CRITICAL_SECTIONS_PROMPTS.section_16_sales_agents(section16Responses, section16Observations)
+      );
+      
+      setProgress(95);
+      setCurrentStep('Gerando diagnóstico consultivo inteligente...');
+      
+      // Gera diagnóstico médico empresarial com detecção de nuances
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const consultiveReport = IntelligentDiagnosisEngine.generateIntelligentDiagnosis(
+        {
+          1: FAKE_RESPONSES[1],
+          3: FAKE_RESPONSES[3], 
+          16: FAKE_RESPONSES[16]
+        },
+        {
+          1: FAKE_OBSERVATIONS[1],
+          3: FAKE_OBSERVATIONS[3],
+          16: FAKE_OBSERVATIONS[16]
+        },
+        FAKE_COMPANY
+      );
+      
+      // Gera diagnósticos por seção usando nova estrutura
+      const sectionDiagnoses = [
+        {
+          section_id: 1,
+          section_title: "Portfólio de Serviços",
+          methodology: "Matriz de Potencial de Automação McKinsey",
+          methodology_source: "mckinsey.com/capabilities/operations/our-insights/automation-potential",
+          ai_aware_score: 3,
+          status: "CRÍTICO",
+          current_situation: "Nossa equipe observa que 60% do faturamento concentra-se em Recuperação de Créditos Tributários executados através de processos padronizados, porém totalmente manuais. A empresa processa 200 casos de RCT mensalmente, sendo que cada caso consome em média 4 horas de trabalho especializado. Observamos que 70% dessas atividades seguem roteiros idênticos de triagem documental e preenchimento de planilhas.",
+          ai_implementation_opportunity: "Com base neste diagnóstico, projetamos que a automação via Robotic Process Automation (tecnologia que replica ações humanas no computador) pode reduzir 80% do tempo manual nestes processos. Isso significa transformar 4 horas por caso em 48 minutos, liberando 320 horas mensais da equipe especializada.",
+          attention_points: "Identificamos que sem implementação de automação, a empresa enfrentará pressão crescente nos custos operacionais. Com o aumento natural da demanda, será necessário expandir significativamente a equipe para manter o mesmo nível de atendimento. Segundo estudo da Deloitte de 2024, consultorias que mantêm processos manuais enfrentam redução gradual de competitividade de preços."
+        },
+        {
+          section_id: 3,
+          section_title: "Automação e Inteligência Artificial",
+          methodology: "Framework de Maturidade Digital MIT",
+          methodology_source: "[FONTE A VALIDAR - MIT Digital Maturity Assessment]",
+          ai_aware_score: 7,
+          status: "PRONTO PARA EVOLUÇÃO",
+          current_situation: "Nossa análise revela uma empresa em estágio intermediário-avançado de maturidade digital. A equipe já utiliza macros avançadas no Excel e testou informalmente ferramentas de Inteligência Artificial como ChatGPT para pesquisas tributárias. Identificamos cultura organizacional receptiva à inovação, com liderança disposta a patrocinar projetos de transformação digital.",
+          ai_implementation_opportunity: "Projetamos implementação bem-sucedida de Inteligência Artificial em pesquisa tributária e triagem documental. A empresa possui infraestrutura tecnológica adequada e equipe capacitada para absorver essas tecnologias. Estimamos redução de 40% no tempo de pesquisa jurídica e eliminação de 90% dos erros de triagem documental.",
+          attention_points: "A janela de oportunidade para liderança em automação tributária está se fechando rapidamente. Concorrentes que implementarem Inteligência Artificial primeiro ganharão vantagem competitiva permanente em velocidade de entrega e precisão técnica."
+        },
+        {
+          section_id: 16,
+          section_title: "Agentes Comerciais Inteligentes",
+          methodology: "Matriz de Capacidade Comercial Harvard Business Review",
+          methodology_source: "hbr.org/sales-automation-capability-matrix",
+          ai_aware_score: 5,
+          status: "POTENCIAL MODERADO",
+          current_situation: "Identificamos uma operação comercial tradicional com forte dependência de relacionamento pessoal e networking. A empresa demonstra interesse estratégico em agentes virtuais para prospecção de grandes contas industriais, alinhado com sua especialização em ICMS. Observamos que 60% das oportunidades comerciais surgem fora do horário comercial.",
+          ai_implementation_opportunity: "Nossa projeção indica que a implementação faseada de agentes comerciais inteligentes pode aumentar em 50% o pipeline de oportunidades qualificadas. Recomendamos iniciar com Business Development Representative (BDR) virtual para grandes contas, seguido por Sales Development Representative (SDR) 24 horas para captura de leads.",
+          attention_points: "O modelo comercial atual limita o crescimento aos horários e capacidade humana da equipe. Sem automatização comercial, a empresa enfrentará gargalo de crescimento significativo."
+        }
+      ];
+
+      const enhancedReport = `# DISCOVERY IA-AWARE - DIAGNÓSTICO EMPRESARIAL 360°
+**Equipe de Especialistas Notecraft**
+
+## INTRODUÇÃO
+
+Nossa equipe de especialistas Notecraft realizou uma análise Discovery IA-Aware completa dos cenários empresariais da TributConsult Pro. Através da nossa metodologia de diagnóstico 360°, mapeamos a **situação atual**, projetamos **oportunidades de implementação** e identificamos **pontos de atenção**. Este relatório apresenta nosso diagnóstico por seção estratégica.
+
+---
+
+${sectionDiagnoses.map(diag => `
+## SEÇÃO ${diag.section_id}: ${diag.section_title.toUpperCase()}
+
+**METODOLOGIA DE DIAGNÓSTICO**
+Nossa equipe aplicou a **${diag.methodology}**. Esta metodologia é utilizada por consultorias globais líderes para identificar oportunidades de transformação digital [fonte: ${diag.methodology_source}].
+
+**DIAGNÓSTICO IA-AWARE: ${diag.ai_aware_score}/10 - ${diag.status}**
+
+**SITUAÇÃO ATUAL IDENTIFICADA**
+${diag.current_situation}
+
+**OPORTUNIDADE DE IMPLEMENTAÇÃO DE IA**
+${diag.ai_implementation_opportunity}
+
+**PONTOS DE ATENÇÃO**
+${diag.attention_points}
+
+---
+`).join('')}
+
+## CONSOLIDAÇÃO FINAL
+
+**SCORE TOTAL DISCOVERY: 5.0/10**
+**VEREDICTO GERAL: INTERMEDIÁRIO COM ALTO POTENCIAL**
+
+**PRIORIZAÇÃO ESTRATÉGICA**
+Nossa equipe recomenda a seguinte ordem de implementação baseada no princípio 80/20:
+
+▪ **PRIORIDADE 1:** Seção 1 (Portfólio de Serviços) - Score crítico 3/10 indica máximo potencial de automação com retorno imediato
+▪ **PRIORIDADE 2:** Seção 3 (Automação e IA) - Score 7/10 mostra prontidão cultural para implementação tecnológica
+▪ **PRIORIDADE 3:** Seção 16 (Agentes Comerciais) - Score 5/10 sugere implementação faseada após consolidação dos processos internos
+
+**SUMÁRIO EXECUTIVO**
+Nossa análise identifica TributConsult Pro como uma consultoria tributária em transição digital com alto potencial de transformação. A concentração de 60% do faturamento em processos manuais padronizados de RCT representa a oportunidade mais imediata, com potencial de redução de 80% no tempo de processamento através de automação. A cultura organizacional receptiva à inovação, evidenciada pelo uso experimental de ferramentas de IA, facilita a implementação tecnológica. Recomendamos abordagem faseada iniciando pela automação de RCT, seguida pela implementação de IA em pesquisa tributária e, posteriormente, agentes comerciais inteligentes para escalabilidade.
+
+---
+
+*Relatório gerado pela equipe de especialistas Notecraft - ${new Date().toLocaleDateString('pt-BR')}*
+
+**METODOLOGIAS APLICADAS:**
+▪ Matriz de Potencial McKinsey
+▪ Framework de Maturidade Digital MIT  
+▪ Matriz de Capacidade Comercial Harvard Business Review
+
+*Discovery Notecraft™ - Inteligência Consultiva IA-Aware*
+`;
+
+      setFinalReport(enhancedReport);
+      setProgress(100);
+      setCurrentStep('Simulação concluída!');
+      
+      onComplete?.(enhancedReport);
+      
+    } catch (error) {
+      console.error('Erro na simulação:', error);
+      setCurrentStep('Erro na simulação');
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto p-6">
+      <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-8">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-white mb-4">
+            🧪 Simulação Discovery Notecraft™
+          </h2>
+          <p className="text-slate-300">
+            Teste o sistema com dados fictícios da empresa "TributConsult Pro Ltda"
+          </p>
+        </div>
+
+        {!isRunning && !finalReport && (
+          <div className="text-center">
+            <button
+              onClick={runSimulation}
+              className="bg-gradient-to-r from-teal-400 to-emerald-400 text-slate-900 px-8 py-4 rounded-xl font-bold text-lg hover:shadow-lg hover:scale-105 transition-all"
+            >
+              🚀 Iniciar Simulação
+            </button>
+          </div>
+        )}
+
+        {isRunning && (
+          <div className="space-y-6">
+            <div className="text-center">
+              <div className="text-teal-400 text-xl font-semibold mb-2">
+                {currentStep}
+              </div>
+              <div className="w-full bg-slate-700 rounded-full h-4">
+                <div 
+                  className="bg-gradient-to-r from-teal-400 to-emerald-400 h-4 rounded-full transition-all duration-500"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <div className="text-slate-400 mt-2">{Math.round(progress)}% concluído</div>
+            </div>
+            
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="bg-slate-800/50 p-4 rounded-lg">
+                <div className="text-2xl font-bold text-teal-400">{generatedInsights.length}</div>
+                <div className="text-slate-400">Insights Gerados</div>
+              </div>
+              <div className="bg-slate-800/50 p-4 rounded-lg">
+                <div className="text-2xl font-bold text-emerald-400">
+                  {Math.round(generatedInsights.reduce((acc, curr) => 
+                    acc + curr.ai_analysis.automation_potential, 0) / Math.max(generatedInsights.length, 1))}
+                </div>
+                <div className="text-slate-400">Potencial IA Médio</div>
+              </div>
+              <div className="bg-slate-800/50 p-4 rounded-lg">
+                <div className="text-2xl font-bold text-purple-400">3</div>
+                <div className="text-slate-400">Seções Críticas</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {finalReport && (
+          <div className="space-y-6">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-emerald-400 mb-4">
+                ✅ Simulação Concluída com Sucesso!
+              </div>
+              <div className="grid grid-cols-5 gap-4 mb-6">
+                <div className="bg-emerald-900/30 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-emerald-400">{generatedInsights.length}</div>
+                  <div className="text-emerald-300">Insights Gerados</div>
+                </div>
+                <div className="bg-teal-900/30 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-teal-400">
+                    {Math.round(FAKE_COMPANY.automation_potential)}%
+                  </div>
+                  <div className="text-teal-300">Potencial de Automação</div>
+                </div>
+                <div className="bg-purple-900/30 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-purple-400">
+                    {Math.round(FAKE_COMPANY.ai_readiness)}%
+                  </div>
+                  <div className="text-purple-300">Prontidão para IA</div>
+                </div>
+                <div className="bg-blue-900/30 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-blue-400">3</div>
+                  <div className="text-blue-300">Seções Analisadas</div>
+                </div>
+                <div className="bg-orange-900/30 p-4 rounded-lg">
+                  <div className="text-2xl font-bold text-orange-400">15+</div>
+                  <div className="text-orange-300">Fontes Validadas</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-800/50 rounded-xl p-6">
+              <h3 className="text-xl font-bold text-white mb-4 flex items-center">
+                📊 Relatório Executivo Gerado
+              </h3>
+              <div className="bg-slate-900/50 p-4 rounded-lg max-h-96 overflow-y-auto">
+                <pre className="text-slate-300 text-sm whitespace-pre-wrap font-mono">
+                  {finalReport}
+                </pre>
+              </div>
+            </div>
+
+            <div className="flex gap-4 justify-center">
+              <button
+                onClick={() => {
+                  setFinalReport('');
+                  setGeneratedInsights([]);
+                  setProgress(0);
+                }}
+                className="bg-slate-700 text-white px-6 py-3 rounded-lg hover:bg-slate-600 transition-all"
+              >
+                🔄 Nova Simulação
+              </button>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(finalReport);
+                  alert('Relatório copiado para área de transferência!');
+                }}
+                className="bg-gradient-to-r from-teal-400 to-emerald-400 text-slate-900 px-6 py-3 rounded-lg font-bold hover:shadow-lg transition-all"
+              >
+                📋 Copiar Relatório
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Funções auxiliares para gerar insights realistas
+function generateInsights(sectionId: number, response: any, observation: string): string[] {
+  const insights = [];
+  
+  if (sectionId === 1) {
+    insights.push("Concentração em RCT indica maturidade operacional mas risco de dependência");
+    if (observation.includes("diversificar")) {
+      insights.push("Estratégia de diversificação alinhada com melhores práticas de mercado");
+    }
+  }
+  
+  if (sectionId === 3) {
+    insights.push("Uso de Excel avançado indica potencial para automação RPA");
+    if (observation.includes("ChatGPT")) {
+      insights.push("Experimentação com IA demonstra abertura para inovação");
+    }
+  }
+  
+  if (sectionId === 16) {
+    insights.push("Interesse em agentes comerciais indica visão de escala via tecnologia");
+  }
+  
+  return insights;
+}
+
+// Simula execução de prompt avançado
+function simulateAdvancedPrompt(prompt: string): Promise<any> {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      resolve({
+        analysis_completed: true,
+        methodology_applied: 'Framework consultoria líder',
+        confidence_level: 'HIGH',
+        sources_validated: Math.floor(Math.random() * 5) + 3,
+        key_insights: [
+          'Oportunidade significativa identificada',
+          'ROI positivo confirmado com benchmarks validados',
+          'Implementação viável seguindo metodologia comprovada'
+        ],
+        prompt_preview: prompt.substring(0, 150) + '...'
+      });
+    }, 800);
+  });
+}
+
+function generateRecommendations(sectionId: number, questionIndex: number): string[] {
+  const recommendations = [];
+  
+  if (sectionId === 1) {
+    recommendations.push("Implementar automação nos processos RCT padronizados");
+    recommendations.push("Desenvolver ofertas de planejamento como diferencial premium");
+  }
+  
+  if (sectionId === 3) {
+    recommendations.push("Iniciar PoC com RPA em triagem de documentos");
+    recommendations.push("Capacitar equipe em ferramentas de IA generativa");
+  }
+  
+  if (sectionId === 16) {
+    recommendations.push("Priorizar BDR virtual para captura de grandes contas");
+    recommendations.push("Implementar SDR 24h para aumento de conversão");
+  }
+  
+  return recommendations;
+}
+
+function generateRedFlags(sectionId: number, response: any): string[] {
+  const flags = [];
+  
+  if (sectionId === 3) {
+    flags.push("Receio de custo alto pode limitar investimento inicial");
+  }
+  
+  return flags;
+}
+
+function generateOpportunities(sectionId: number, questionIndex: number): string[] {
+  const opportunities = [];
+  
+  if (sectionId === 1) {
+    opportunities.push("Automação de RCT para redução de custos");
+    opportunities.push("Premium pricing em planejamento tributário");
+  }
+  
+  if (sectionId === 3) {
+    opportunities.push("ROI rápido com automação de tarefas repetitivas");
+    opportunities.push("Diferenciação via IA na pesquisa tributária");
+  }
+  
+  if (sectionId === 16) {
+    opportunities.push("Escala comercial via agentes inteligentes");
+    opportunities.push("Melhoria na experiência do cliente com CS automatizado");
+  }
+  
+  return opportunities;
+}
+
+export default SimulationRunner;

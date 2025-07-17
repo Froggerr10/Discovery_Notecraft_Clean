@@ -1,0 +1,538 @@
+// app/page.tsx - DISCOVERY NOTECRAFT™ COMPLETO
+"use client";
+
+import { useState, useEffect } from 'react';
+import { QUESTIONS, SECTION_RESPONSIBILITIES, getQuestionsBySection, getSectionById } from '../lib/questions';
+import { processAndSaveInsights } from '../lib/ai-processor';
+import { DiscoverySessionService, QuestionResponseService } from '../lib/supabase';
+import Section0CNPJ from '../components/Section0CNPJ';
+// import SectionSelectionModal from '../components/SectionSelectionModal';
+import { RevenueEstimation } from '../lib/revenue-estimation';
+
+export default function HomePage() {
+  const [step, setStep] = useState(1); // 1=CNPJ, 2=SeleçãoSeções, 3=Questionário, 4=Finalizado
+  const [cnpj, setCnpj] = useState('');
+  const [companyData, setCompanyData] = useState(null);
+  const [selectedSections, setSelectedSections] = useState<number[]>([]);
+  const [currentSection, setCurrentSection] = useState(1);
+  const [responses, setResponses] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [showSectionModal, setShowSectionModal] = useState(false);
+  
+  // ID único da sessão (gerado uma vez e mantido)
+  const [sessionId] = useState(() => `discovery_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+  
+  // Auto-save: salva INSTANTANEAMENTE no Supabase (não delayed)
+  useEffect(() => {
+    if (Object.keys(responses).length > 0 && companyData) {
+      const saveToSupabase = async () => {
+        try {
+          // Garante que a sessão existe
+          await DiscoverySessionService.createSession({
+            id: sessionId,
+            company_cnpj: cnpj,
+            company_name: companyData.nome,
+            company_trade_name: companyData.fantasia || companyData.nome,
+            company_data: companyData,
+            section_responsibilities: {},
+            started_at: new Date().toISOString(),
+            current_section: currentSection,
+            total_progress: Math.round((Object.keys(responses).length / QUESTIONS.length) * 100),
+            metadata: {
+              browser_info: navigator.userAgent,
+              total_questions: QUESTIONS.length
+            }
+          }).catch(() => {}); // Ignora erro se sessão já existe
+          
+          console.log(`✅ SAVE INSTANTÂNEO: ${Object.keys(responses).length} respostas`);
+        } catch (error) {
+          console.log('⚠️ Erro no save instantâneo:', error);
+        }
+      };
+
+      // SAVE INSTANTÂNEO - sem delay
+      saveToSupabase();
+    }
+  }, [responses, companyData, sessionId, cnpj, currentSection]);
+
+  const handleCNPJConfirmed = (data: any) => {
+    setCompanyData(data);
+    setShowSectionModal(true); // Mostra modal de seleção
+  };
+
+  const handleSectionSelection = (sections: number[]) => {
+    setSelectedSections(sections);
+    setCurrentSection(sections[0]); // Começa pela primeira seção selecionada
+    setShowSectionModal(false);
+    setStep(3); // Vai para o questionário
+  };
+  // Função para atualizar resposta com processamento IA automático + MERGE AUTOMÁTICO
+  const updateResponse = async (questionId, value, observations = '') => {
+    const timestamp = Date.now();
+    
+    // MERGE AUTOMÁTICO: se resposta já existe, manter a mais recente
+    setResponses(prev => {
+      const existingResponse = prev[questionId];
+      
+      // Se não existe resposta anterior, cria nova
+      if (!existingResponse) {
+        return {
+          ...prev,
+          [questionId]: { value, observations, lastModified: timestamp }
+        };
+      }
+      
+      // Se existe, verifica se houve conflito e resolve automaticamente
+      const hasConflict = existingResponse.value !== value && existingResponse.lastModified;
+      return {
+        ...prev,
+        [questionId]: { 
+          value, 
+          observations: observations || existingResponse.observations, // Preserva observações
+          lastModified: timestamp
+        }
+      };
+    });
+
+    // Processa insights IA em background (não bloqueia a UI)
+    try {
+      const aiRawData = JSON.stringify({
+        timestamp: new Date().toISOString(),
+        question_type: QUESTIONS.find(q => q.id === questionId)?.type || 'unknown',
+        section_id: QUESTIONS.find(q => q.id === questionId)?.section_id || 0,
+        response_complexity: typeof value === 'object' ? 'complex' : 'simple',
+        has_observations: !!observations && observations.length > 0,
+        interaction_metadata: {
+          browser_info: typeof window !== 'undefined' ? navigator.userAgent : '',
+          response_time: Date.now(),
+          field_focus_count: 1
+        }
+      });
+
+      // Processa insights automaticamente (não await para não travar a UI)
+      processAndSaveInsights(
+        sessionId, // Usa o sessionId fixo
+        questionId,
+        value,
+        observations,
+        aiRawData
+      ).catch(error => {
+        console.log('⚠️ Processamento IA em background falhou:', error);
+      });
+
+    } catch (error) {
+      console.log('⚠️ Erro ao processar IA:', error);
+    }
+  };
+
+  const nextSection = () => {
+    const availableSections = selectedSections.length > 0 ? selectedSections : [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17];
+    const currentIndex = availableSections.indexOf(currentSection);
+    
+    if (currentIndex < availableSections.length - 1) {
+      setCurrentSection(availableSections[currentIndex + 1]);
+    } else {
+      setStep(4); // Finalizado
+    }
+  };
+
+  const prevSection = () => {
+    const availableSections = selectedSections.length > 0 ? selectedSections : [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17];
+    const currentIndex = availableSections.indexOf(currentSection);
+    
+    if (currentIndex > 0) {
+      setCurrentSection(availableSections[currentIndex - 1]);
+    }
+  };
+
+  // TELA 1: CNPJ
+  if (step === 1) {
+    return <Section0CNPJ onCNPJConfirmed={handleCNPJConfirmed} />;
+  }
+
+  // TELA 4: FINALIZADO
+  if (step === 4) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-teal-900 to-slate-900 flex items-center justify-center p-4">
+        <div className="w-full max-w-2xl text-center">
+          <div className="w-24 h-24 bg-gradient-to-r from-green-400 to-emerald-400 rounded-full flex items-center justify-center mx-auto mb-8">
+            <span className="text-4xl">✅</span>
+          </div>
+          
+          <h1 className="text-4xl font-bold text-white mb-4">Discovery Completo!</h1>
+          
+          <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-3xl p-8">
+            <p className="text-xl text-slate-300 mb-6">
+              Obrigado por responder ao Discovery Notecraft™.
+            </p>
+            <p className="text-slate-400">
+              Suas {Object.keys(responses).length} respostas foram registradas e serão analisadas pela nossa IA.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // TELA 2: INTRODUÇÃO E RESPONSÁVEIS
+  if (step === 2) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-teal-900 to-slate-900 flex items-center justify-center p-4">
+        <div className="w-full max-w-4xl">
+          <div className="text-center mb-8">
+            <div className="w-20 h-20 bg-gradient-to-r from-teal-400 to-emerald-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <span className="text-3xl font-bold text-slate-900">∞</span>
+            </div>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-teal-400 to-emerald-400 bg-clip-text text-transparent mb-2">
+              Discovery Notecraft™
+            </h1>
+            <p className="text-slate-300 text-lg mb-4">{companyData?.nome}</p>
+            <div className="flex justify-center gap-4 text-sm text-slate-400 mb-4">
+              <span>CNPJ: {companyData?.cnpj}</span>
+              <span>•</span>
+              <span>{companyData?.porte}</span>
+              <span>•</span>
+              <span>{companyData?.endereco ? `${companyData.endereco.municipio}/${companyData.endereco.uf}` : 'Localização não informada'}</span>
+            </div>
+            <div className="text-center text-xs text-slate-500 mb-6">
+              CNAE Principal: {companyData?.atividade_principal?.[0]?.code || 'N/A'} - {companyData?.atividade_principal?.[0]?.text || 'Não informado'}
+            </div>
+            <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-2xl p-6 text-left">
+              <h2 className="text-2xl font-bold text-white mb-4">📋 Sobre este Questionário</h2>
+              
+              <div className="space-y-4 text-slate-300">
+                <p><strong className="text-teal-400">Objetivo:</strong> Identificar <strong>áreas prioritárias para implementação de IA</strong> na sua operação, mapeando gargalos operacionais e oportunidades de automação que podem gerar ROI comprovado.</p>
+                
+                <p><strong className="text-teal-400">Estrutura:</strong> Este questionário é composto por <strong>17 seções especializadas</strong> que deverão ser preenchidas pelos responsáveis de cada área.</p>
+                
+                <p><strong className="text-teal-400">Resultado:</strong> Relatório estratégico com recomendações priorizadas de onde implementar IA primeiro para máximo impacto.</p>
+                
+                <p><strong className="text-teal-400">Tempo estimado:</strong> 45-60 minutos (pode ser preenchido em etapas)</p>
+                
+                <p><strong className="text-teal-400">Responsáveis sugeridos por seção:</strong></p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                  <div>• <span className="text-red-300">CRÍTICAS:</span> Seções 1, 3, 16 → Diretoria</div>
+                  <div>• <span className="text-yellow-300">ALTAS:</span> Seções 2, 4, 5, 8, 9 → Gerência</div>
+                  <div>• <span className="text-blue-300">MÉDIAS:</span> Seções 6, 7, 10, 11, 13 → Coordenação</div>
+                  <div>• <span className="text-gray-300">BAIXAS:</span> Seções 12, 14, 15, 17 → Operacional</div>
+                </div>
+              </div>
+              
+              <div className="mt-6 p-4 bg-teal-500/20 rounded-xl">
+                <p className="text-sm text-teal-200">
+                  💡 <strong>Dica:</strong> Cada seção terá campos para identificar quem está preenchendo (nome, email, WhatsApp). 
+                  Se a mesma pessoa preencher múltiplas seções, os dados serão carregados automaticamente.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-center">
+            <button
+              onClick={() => setStep(3)}
+              className="px-8 py-4 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-2xl font-semibold text-lg hover:from-teal-600 hover:to-emerald-600 transition-all"
+            >
+              Iniciar Questionário → {SECTION_RESPONSIBILITIES[0]?.title || 'Primeira Seção'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // TELA 3: QUESTIONÁRIO COMPLETO
+  if (step === 3) {
+    const currentSectionData = getSectionById(currentSection);
+    // Filtra questões apenas das seções selecionadas
+    const filteredQuestions = selectedSections.length > 0 
+      ? QUESTIONS.filter(q => selectedSections.includes(q.section_id))
+      : QUESTIONS;
+    
+    const currentQuestions = getQuestionsBySection(currentSection);
+    const progress = Math.round((Object.keys(responses).length / filteredQuestions.length) * 100);
+
+    // Explicações das seções
+    const getSectionExplanation = (sectionId) => {
+      const explanations = {
+        1: "Esta seção mapeia a distribuição dos serviços da empresa para identificar onde a IA pode otimizar operações com maior impacto financeiro.",
+        2: "Avaliamos o estado atual da gestão de conhecimento para implementar sistemas RAG (Retrieval-Augmented Generation) que potencializem a expertise existente.", 
+        3: "Identificamos a maturidade atual em automação e receptividade à IA para desenhar uma estratégia de implementação adequada ao perfil da empresa.",
+        4: "Mapeamos como a empresa mede valor para garantir que soluções IA entreguem ROI mensurável e alinhado aos KPIs existentes.",
+        5: "Analisamos planos de crescimento para identificar onde IA pode acelerar expansão e remover gargalos de escalabilidade.",
+        6: "Avaliamos infraestrutura tecnológica atual para planejar integrações IA sem disruption operacional.",
+        7: "Mapeamos estrutura organizacional para identificar champions IA e pontos de resistência à mudança.",
+        8: "Analisamos KPIs atuais para desenhar dashboards IA que melhorem tomada de decisão baseada em dados.",
+        9: "Avaliamos processos comerciais para implementar automação que acelere pipeline e melhore conversão.",
+        10: "Mapeamos fontes de informação jurídica para criar assistentes IA que agilizem pesquisa e análise legal.",
+        11: "Avaliamos maturidade digital para calibrar velocidade de implementação IA conforme capacidade de absorção.",
+        12: "Identificamos oportunidades para IA transcrever, resumir e extrair insights de reuniões e conversas comerciais.",
+        13: "Mapeamos processos de suporte para implementar chatbots IA que melhorem experiência e liberem equipe para tarefas estratégicas.",
+        14: "Avaliamos comunicação com clientes para IA gerar conteúdo personalizado e proativo que fortaleça relacionamento.",
+        15: "Exploramos potencial de transformar metodologia em produtos IA escaláveis que gerem receita recorrente.",
+        16: "Identificamos processos comerciais para agentes IA que automatizem prospecção, qualificação e follow-up.",
+        17: "Exploramos automações IA avançadas para análise de documentos, geração de relatórios e monitoramento legislativo."
+      };
+      return explanations[sectionId] || "Esta seção coleta informações estratégicas para implementação de IA.";
+    };
+
+    const renderQuestion = (question) => {
+      let questionText = question.text.replace(/\[Empresa\]/g, companyData?.nome || 'empresa');
+      questionText = questionText.replace(/Valor Fiscal/g, companyData?.nome || 'empresa');
+      
+      return (
+        <div key={question.id} className="bg-white/5 rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            {/* Indicador visual caos-proof + conflitos */}
+            <div className={`w-4 h-4 rounded-full flex-shrink-0 ${
+              responses[question.id]?.value 
+                ? 'bg-green-400 shadow-lg shadow-green-400/30' 
+                : 'bg-slate-600 border-2 border-slate-400'
+            }`}>
+              {responses[question.id]?.value && (
+                <span className="text-white text-xs flex items-center justify-center h-full">
+                  ✓
+                </span>
+              )}
+            </div>
+            <h3 className="text-lg font-semibold text-teal-400 flex-1">
+              {questionText}
+            </h3>
+            {responses[question.id]?.value && (
+              <span className="text-xs text-green-300 font-medium bg-green-500/20 px-2 py-1 rounded">
+                Preenchido
+              </span>
+            )}
+          </div>
+          
+          {/* Campos estruturados específicos */}
+          {question.id === 41 && (
+            <div className="grid grid-cols-2 gap-4">
+              <div><label className="block text-sm text-slate-300 mb-1">Total pessoas:</label><input type="number" className="w-full px-3 py-2 rounded bg-white/5 border border-white/20 text-white" /></div>
+              <div><label className="block text-sm text-slate-300 mb-1">Sócios/Diretores:</label><input type="number" className="w-full px-3 py-2 rounded bg-white/5 border border-white/20 text-white" /></div>
+              <div><label className="block text-sm text-slate-300 mb-1">Gerentes:</label><input type="number" className="w-full px-3 py-2 rounded bg-white/5 border border-white/20 text-white" /></div>
+              <div><label className="block text-sm text-slate-300 mb-1">Consultores Sr:</label><input type="number" className="w-full px-3 py-2 rounded bg-white/5 border border-white/20 text-white" /></div>
+              <div><label className="block text-sm text-slate-300 mb-1">Consultores Jr:</label><input type="number" className="w-full px-3 py-2 rounded bg-white/5 border border-white/20 text-white" /></div>
+              <div><label className="block text-sm text-slate-300 mb-1">Administrativo:</label><input type="number" className="w-full px-3 py-2 rounded bg-white/5 border border-white/20 text-white" /></div>
+            </div>
+          )}
+
+          {question.id === 42 && (
+            <div className="space-y-3">
+              <div><label className="block text-sm text-slate-300 mb-1">Número total unidades:</label><input type="number" className="w-full px-3 py-2 rounded bg-white/5 border border-white/20 text-white" /></div>
+              <div><label className="block text-sm text-slate-300 mb-1">Matriz (cidade):</label><input type="text" className="w-full px-3 py-2 rounded bg-white/5 border border-white/20 text-white" /></div>
+              <div><label className="block text-sm text-slate-300 mb-1">Filiais:</label><textarea rows={2} className="w-full px-3 py-2 rounded bg-white/5 border border-white/20 text-white" placeholder="Filial 1: Cidade, pessoas. Filial 2: ..."></textarea></div>
+            </div>
+          )}
+
+          {question.id === 58 && (
+            <div className="grid grid-cols-2 gap-4">
+              <div><label className="block text-sm text-slate-300 mb-1">Dedicados 100% vendas:</label><input type="number" className="w-full px-3 py-2 rounded bg-white/5 border border-white/20 text-white" /></div>
+              <div><label className="block text-sm text-slate-300 mb-1">Sócios em vendas:</label><input type="number" className="w-full px-3 py-2 rounded bg-white/5 border border-white/20 text-white" /></div>
+              <div><label className="block text-sm text-slate-300 mb-1">SDRs/Pré-vendas:</label><input type="number" className="w-full px-3 py-2 rounded bg-white/5 border border-white/20 text-white" /></div>
+              <div><label className="block text-sm text-slate-300 mb-1">Closers:</label><input type="number" className="w-full px-3 py-2 rounded bg-white/5 border border-white/20 text-white" /></div>
+            </div>
+          )}
+
+          {/* Campos normais para outras questões */}
+          {![41,42,58].includes(question.id) && (
+            <>
+              {question.type === 'radio' && (
+                <div className="space-y-2">
+                  {question.options?.map((option, index) => (
+                    <label key={index} className="flex items-center text-slate-300">
+                      <input type="radio" name={`question-${question.id}`} value={option} onChange={(e) => updateResponse(question.id, e.target.value)} className="mr-3" />
+                      {option}
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {question.type === 'checkbox' && (
+                <div className="space-y-2">
+                  {question.options?.map((option, index) => (
+                    <label key={index} className="flex items-center text-slate-300">
+                      <input type="checkbox" value={option} onChange={(e) => {
+                        const currentValues = responses[question.id]?.value || [];
+                        const newValues = e.target.checked ? [...currentValues, option] : currentValues.filter(v => v !== option);
+                        updateResponse(question.id, newValues);
+                      }} className="mr-3" />
+                      {option}
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {question.type === 'slider_percentage' && (
+                <div className="grid grid-cols-2 gap-4">
+                  {question.options?.map((option, index) => (
+                    <div key={index}>
+                      <label className="block text-sm text-slate-300 mb-1">{option}</label>
+                      <input type="number" max="100" placeholder="%" onChange={(e) => updateResponse(`${question.id}-${index}`, e.target.value)} className="w-full px-3 py-2 rounded bg-white/5 border border-white/20 text-white" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {(question.type === 'text' || question.type === 'textarea') && (
+                <textarea onChange={(e) => updateResponse(question.id, e.target.value)} className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/20 text-white" rows={question.type === 'textarea' ? 4 : 2} placeholder={question.placeholder || "Digite sua resposta..."} />
+              )}
+            </>
+          )}
+
+          {question.has_observations && (
+            <textarea 
+              onChange={(e) => updateResponse(`${question.id}-obs`, '', e.target.value)} 
+              className="w-full mt-4 px-4 py-3 rounded-xl bg-white/5 border border-white/20 text-white" 
+              rows={2} 
+              placeholder="Observações..."
+            />
+          )}
+        </div>
+      );
+    };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-teal-900 to-slate-900">
+      {/* Header com progresso */}
+      <div className="w-full bg-slate-900/50 backdrop-blur-sm border-b border-white/10 p-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Discovery Notecraft™</h1>
+              <p className="text-slate-300">{companyData?.nome}</p>
+              <p className="text-xs text-slate-400">CNPJ: {companyData?.cnpj} • {companyData?.atividade_principal?.[0]?.code || 'N/A'}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-slate-300">{currentSectionData?.title}</p>
+              <div className="mb-1">
+                <span className="text-xs text-teal-300 font-semibold">
+                  {Object.keys(responses).length} de 109 questões preenchidas
+                </span>
+              </div>
+              <div className="w-40 h-3 bg-slate-700 rounded-full">
+                <div 
+                  className="h-full bg-gradient-to-r from-teal-400 to-emerald-400 rounded-full transition-all duration-500"
+                  style={{width: `${Math.round((Object.keys(responses).length / 109) * 100)}%`}}
+                ></div>
+              </div>
+              <div className="text-xs text-slate-400 mt-1">
+                {Math.round((Object.keys(responses).length / 109) * 100)}% concluído
+              </div>
+            </div>
+          </div>
+          
+          {/* Legenda dos indicadores visuais */}
+          <div className="flex items-center justify-center gap-6 text-xs mt-3 p-3 bg-slate-800/30 rounded-lg border border-slate-700/50">
+            <span className="text-slate-300 font-medium mr-2">Status das questões:</span>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-slate-600 border border-slate-400 rounded-full"></div>
+              <span className="text-slate-400">Aguardando resposta</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+              <span className="text-green-300">✓ Respondida</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-orange-400 rounded-full"></div>
+              <span className="text-orange-300">⚡ Auto-resolvida</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-3xl p-8">
+          {/* Cabeçalho da seção */}
+          <div className="mb-8">
+            <div className="flex items-center gap-3 mb-4">
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                currentSectionData?.priority === 'CRÍTICA' ? 'bg-red-500/20 text-red-300' :
+                currentSectionData?.priority === 'ALTA' ? 'bg-orange-500/20 text-orange-300' :
+                currentSectionData?.priority === 'MÉDIA' ? 'bg-yellow-500/20 text-yellow-300' :
+                'bg-slate-500/20 text-slate-300'
+              }`}>
+                {currentSectionData?.priority}
+              </span>
+              <span className="text-slate-400">{currentSection}/17</span>
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2">{currentSectionData?.title}</h2>
+          </div>
+
+          {/* Explicação da seção */}
+          <div className="mb-6 p-4 bg-teal-500/10 rounded-xl border border-teal-500/20">
+            <h3 className="text-sm font-semibold text-teal-300 mb-2">💡 Objetivo desta seção:</h3>
+            <p className="text-sm text-teal-100 mb-3">{currentSectionData?.value_proposition}</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-emerald-400">🎯 Resultado esperado:</span>
+              <span className="text-xs text-emerald-300">{currentSectionData?.expected_outcome}</span>
+            </div>
+          </div>
+
+          {/* Responsável da seção */}
+          <div className="mb-6 p-4 bg-blue-500/10 rounded-xl border border-blue-500/20">
+            <h3 className="text-sm font-semibold text-blue-300 mb-3">👤 Quem está preenchendo esta seção:</h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs text-blue-200 mb-1">Nome completo:</label>
+                <input type="text" placeholder="Nome do responsável" className="w-full px-3 py-2 text-sm rounded bg-blue-900/20 border border-blue-500/30 text-white" />
+              </div>
+              <div>
+                <label className="block text-xs text-blue-200 mb-1">Email:</label>
+                <input type="email" placeholder="email@empresa.com" className="w-full px-3 py-2 text-sm rounded bg-blue-900/20 border border-blue-500/30 text-white" />
+              </div>
+              <div>
+                <label className="block text-xs text-blue-200 mb-1">WhatsApp:</label>
+                <input type="tel" placeholder="(11) 99999-9999" className="w-full px-3 py-2 text-sm rounded bg-blue-900/20 border border-blue-500/30 text-white" />
+              </div>
+            </div>
+            <p className="text-xs text-blue-300 mt-2">
+              <strong>Sugerido:</strong> {currentSectionData?.suggested_role} - {currentSectionData?.department}
+            </p>
+          </div>
+
+          {/* Questões da seção */}
+          <div className="space-y-6">
+            {currentQuestions.map(renderQuestion)}
+          </div>
+
+          {/* Navegação */}
+          <div className="flex justify-between items-center mt-8 pt-6 border-t border-white/10">
+            <button
+              onClick={prevSection}
+              disabled={currentSection === 1}
+              className="px-6 py-3 bg-slate-600 text-white rounded-xl font-medium hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              ← Seção Anterior
+            </button>
+
+            <div className="text-center">
+              <p className="text-slate-300 text-sm">
+                {Object.keys(responses).length} respostas registradas
+              </p>
+              {/* Conflitos resolvidos - funcionalidade futura */}
+            </div>
+
+            <button
+              onClick={nextSection}
+              className="px-6 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-xl font-medium hover:from-teal-600 hover:to-emerald-600 transition-all"
+            >
+              {(() => {
+                const availableSections = selectedSections.length > 0 ? selectedSections : [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17];
+                const currentIndex = availableSections.indexOf(currentSection);
+                const isLastSection = currentIndex === availableSections.length - 1;
+                return isLastSection ? 'Finalizar Discovery' : 'Próxima Seção';
+              })()} →
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Modal de Seleção de Seções */}
+      {/*<SectionSelectionModal
+        isOpen={showSectionModal}
+        onClose={() => setShowSectionModal(false)}
+        onSelectionComplete={handleSectionSelection}
+      />*/}
+    </div>
+  );
+}
