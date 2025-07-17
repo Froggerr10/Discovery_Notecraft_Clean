@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste Supabase - Discovery Notecraft</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Teste de Conexão Supabase</h1>
+    <button onclick="testarConexao()">Testar Conexão</button>
+    <button onclick="buscarRespostas()">Buscar Respostas Salvas</button>
+    <div id="resultado"></div>
+
+    <script>
+        const supabaseUrl = 'https://dilcrttdiztmowvgayiq.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpbGNydHRkaXp0bW93dmdheWlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA5MDUyNTgsImV4cCI6MjA2NjQ4MTI1OH0.2JrmiMo4s6sjXIa20ZcpFFyPR3khGshIv_eFyZtvPJg';
+        
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+        async function testarConexao() {
+            try {
+                const { data, error } = await supabase.from('discovery_responses').select('count');
+                if (error) throw error;
+                document.getElementById('resultado').innerHTML = `✅ CONEXÃO OK! Supabase conectado.`;
+            } catch (error) {
+                document.getElementById('resultado').innerHTML = `❌ ERRO: ${error.message}`;
+            }
+        }
+
+        async function buscarRespostas() {
+            try {
+                const { data, error } = await supabase
+                    .from('discovery_responses')
+                    .select('*')
+                    .order('created_at', { ascending: false })
+                    .limit(10);
+                
+                if (error) throw error;
+                
+                document.getElementById('resultado').innerHTML = `
+                    <h3>📊 RESPOSTAS NO BANCO:</h3>
+                    <p><strong>Total encontrado:</strong> ${data.length} registros</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('resultado').innerHTML = `❌ ERRO: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
