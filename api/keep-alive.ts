@@ -1,5 +1,6 @@
 // Keep-Alive Edge Function para Supabase
 // Impede que o projeto seja pausado por inatividade
+// Updated: force redeploy with env vars
 
 import type { NextRequest } from 'next/server'
 
@@ -8,6 +9,9 @@ export const config = {
 }
 
 export default async function handler(req: NextRequest) {
+  // Debug: log para verificar se variável está disponível
+  console.log('KEEP_ALIVE_SECRET exists:', !!process.env.KEEP_ALIVE_SECRET)
+  
   // Só aceita POST com token secreto
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 })
@@ -15,7 +19,12 @@ export default async function handler(req: NextRequest) {
 
   // Validação simples de segurança
   const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.KEEP_ALIVE_SECRET}`) {
+  const expectedAuth = `Bearer ${process.env.KEEP_ALIVE_SECRET}`
+  
+  console.log('Auth header received:', authHeader?.substring(0, 20) + '...')
+  console.log('Expected auth:', expectedAuth?.substring(0, 20) + '...')
+  
+  if (authHeader !== expectedAuth) {
     return new Response('Unauthorized', { status: 401 })
   }
 
