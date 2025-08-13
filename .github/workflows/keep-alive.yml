@@ -1,41 +1,44 @@
-name: Keep Supabase Alive
-on:
-  schedule:
-    # Executa a cada 48 horas (todo dia par às 00:00 UTC)
-    - cron: '0 0 */2 * *'
-  # Permite execução manual
-  workflow_dispatch:
+# DESABILITADO TEMPORARIAMENTE
+# Supabase detectou como atividade suspeita
 
-jobs:
-  ping-supabase:
-    runs-on: ubuntu-latest
-    name: Ping Supabase to prevent inactivity pause
+# name: Keep Supabase Alive
+# on:
+#   schedule:
+#     # Executa a cada 48 horas (todo dia par às 00:00 UTC)
+#     - cron: '0 0 */2 * *'
+#   # Permite execução manual
+#   workflow_dispatch:
+
+# jobs:
+#   ping-supabase:
+#     runs-on: ubuntu-latest
+#     name: Ping Supabase to prevent inactivity pause
     
-    steps:
-      - name: Ping Keep-Alive Endpoint
-        run: |
-          echo "🔄 Pinging Supabase keep-alive endpoint..."
+#     steps:
+#       - name: Ping Keep-Alive Endpoint
+#         run: |
+#           echo "🔄 Pinging Supabase keep-alive endpoint..."
           
-          response=$(curl -s -w "%{http_code}" -X POST \
-            "https://${{ vars.VERCEL_DOMAIN }}/api/keep-alive" \
-            -H "Authorization: Bearer ${{ secrets.KEEP_ALIVE_SECRET }}" \
-            -H "Content-Type: application/json" \
-            -o /tmp/response.json)
+#           response=$(curl -s -w "%{http_code}" -X POST \
+#             "https://${{ vars.VERCEL_DOMAIN }}/api/keep-alive" \
+#             -H "Authorization: Bearer ${{ secrets.KEEP_ALIVE_SECRET }}" \
+#             -H "Content-Type: application/json" \
+#             -o /tmp/response.json)
           
-          http_code="${response: -3}"
+#           http_code="${response: -3}"
           
-          echo "📊 HTTP Status: $http_code"
-          echo "📄 Response:"
-          cat /tmp/response.json
+#           echo "📊 HTTP Status: $http_code"
+#           echo "📄 Response:"
+#           cat /tmp/response.json
           
-          if [ "$http_code" -eq 200 ]; then
-            echo "✅ Supabase keep-alive successful!"
-          else
-            echo "❌ Keep-alive failed with status $http_code"
-            exit 1
-          fi
+#           if [ "$http_code" -eq 200 ]; then
+#             echo "✅ Supabase keep-alive successful!"
+#           else
+#             echo "❌ Keep-alive failed with status $http_code"
+#             exit 1
+#           fi
 
-      - name: Log Execution
-        run: |
-          echo "🕐 Execution time: $(date)"
-          echo "🎯 Next execution: $(date -d '+2 days')"
+#       - name: Log Execution
+#         run: |
+#           echo "🕐 Execution time: $(date)"
+#           echo "🎯 Next execution: $(date -d '+2 days')"
